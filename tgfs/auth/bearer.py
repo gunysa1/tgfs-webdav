@@ -1,5 +1,5 @@
 import time
-from typing import TypedDict
+from typing import TypedDict, cast
 
 import jwt
 
@@ -49,8 +49,11 @@ def login(username: str, password: str) -> str:
 
 
 def authenticate(token: str) -> User:
-    payload: JWTPayload = jwt.decode(
-        token, key=jwt_config.secret, algorithms=[jwt_config.algorithm]
+    payload = cast(
+        JWTPayload,
+        jwt.decode(
+            token, key=jwt_config.secret, algorithms=[jwt_config.algorithm]
+        ),
     )
 
     username = payload["username"]
