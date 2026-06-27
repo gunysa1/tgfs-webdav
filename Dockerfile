@@ -38,14 +38,17 @@ COPY tgfs/ ./tgfs/
 COPY asgidav/ ./asgidav/
 COPY main.py ./
 
-# Create non-root user
-RUN useradd --create-home --shell /bin/bash tgfs
+# Create non-root user and a writable data dir (Telegram session files live here)
+RUN useradd --create-home --shell /bin/bash tgfs \
+    && mkdir -p /home/tgfs/.tgfs \
+    && chown -R tgfs:tgfs /home/tgfs/.tgfs
 USER tgfs
 
 # Expose WebDAV port
 EXPOSE 1900
 
-ENV DATA_DIR=/home/tgfs/.tgfs
+# Code reads TGFS_DATA_DIR (the previous DATA_DIR var was ignored)
+ENV TGFS_DATA_DIR=/home/tgfs/.tgfs
 
 # Run the application
 CMD ["python", "main.py"]

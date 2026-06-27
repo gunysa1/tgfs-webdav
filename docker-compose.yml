@@ -1,0 +1,17 @@
+services:
+  tgfs:
+    build: .
+    image: gunysa1/tgfs-webdav:local
+    container_name: tgfs-webdav
+    restart: unless-stopped
+    ports:
+      - "1900:1900"
+    environment:
+      # config.yaml is mounted separately (keeps secrets out of the data volume)
+      TGFS_CONFIG_FILE: /config/config.yaml
+    volumes:
+      - ./config.yaml:/config/config.yaml:ro
+      - tgfs-data:/home/tgfs/.tgfs
+
+volumes:
+  tgfs-data:
