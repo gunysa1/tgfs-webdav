@@ -17,15 +17,20 @@ There are two ways to run it:
 ## 0. One-time: prepare secrets (both paths)
 
 Secrets never live in `config.yaml`. It only holds structure and `${VAR}`
-placeholders, resolved at startup from a gitignored `.env`. A missing variable
-fails fast with a clear error.
+placeholders, resolved at startup from a gitignored `secrets.env`. A missing
+variable fails fast with a clear error.
+
+> The file is named **`secrets.env`** (not `.env`) on purpose: Docker Compose
+> auto-loads any file literally named `.env` and runs `${...}` interpolation on
+> it, which warns on and blanks any `$` inside a secret value. Using a different
+> name keeps Compose out of your secrets.
 
 ```bash
 cd ~/github/tgfs          # or wherever you cloned it
-cp .env.example .env
+cp secrets.env.example secrets.env
 ```
 
-Edit `.env` and fill in every value (all are required):
+Edit `secrets.env` and fill in every value (all are required):
 
 | Variable            | What it is                                              |
 |---------------------|---------------------------------------------------------|
@@ -39,12 +44,13 @@ Edit `.env` and fill in every value (all are required):
 
 > 🔐 If these were ever shared in plaintext, **rotate them now**: BotFather
 > `/revoke` for bot tokens, GitHub → regenerate for the PATs — then paste the
-> new values into `.env`. `.env` and `config.yaml` are gitignored; never commit them.
+> new values into `secrets.env`. `secrets.env` and `config.yaml` are gitignored;
+> never commit them.
 
 Confirm they’re ignored:
 
 ```bash
-git check-ignore .env config.yaml   # should print both
+git check-ignore secrets.env config.yaml   # should print both
 ```
 
 ---
@@ -57,8 +63,8 @@ git check-ignore .env config.yaml   # should print both
 docker compose up -d --build
 ```
 
-Compose mounts `config.yaml` read-only at `/config/config.yaml` and `.env` into
-the container’s data dir, then starts the server on host port 1900.
+Compose mounts `config.yaml` read-only at `/config/config.yaml` and `secrets.env`
+into the container’s data dir (as `.env`), then starts the server on host port 1900.
 
 ### A2. Watch the logs until it’s ready
 
@@ -91,11 +97,11 @@ curl -u guny:"$PW" http://localhost:1900/webdav/hello.txt
 ```bash
 docker compose ps        # status
 docker compose logs -f   # follow logs
-docker compose restart   # restart after editing .env
+docker compose restart   # restart after editing secrets.env
 docker compose down      # stop (named volume tgfs-data keeps the TG sessions)
 ```
 
-Editing `.env` or `config.yaml` requires a `docker compose restart` (or
+Editing `secrets.env` or `config.yaml` requires a `docker compose restart` (or
 `up -d` to also pick up a rebuild) to take effect.
 
 ---
@@ -124,14 +130,22 @@ poetry run make ruff
 poetry run make mypy
 ```
 
-### B4. Point the app at this directory’s config + .env
+### B4. Point the app at this directory’s config + secrets
 
-The app reads `config.yaml` and `.env` from `TGFS_DATA_DIR` (default `~/.tgfs`).
-For a local run, point it at the repo dir:
+The app reads `config.yaml` and a `.env` file from `TGFS_DATA_DIR` (default
+`~/.tgfs`). For a local run, point it at the repo dir:
 
 ```bash
 export TGFS_DATA_DIR=.
 export TGFS_CONFIG_FILE=config.yaml
+```
+
+The native run loads the secrets file by the literal name **`.env`** (there is no
+Docker Compose here, so the `secrets.env` rename from §0 doesn’t apply). Make the
+secrets available under that name:
+
+```bash
+cp secrets.env .env     # .env is also gitignored
 ```
 
 ### B5. Start the server
@@ -164,10 +178,11 @@ rclone mount tgfs:/ /mnt/tgfs --vfs-cache-mode full
 
 | Symptom | Cause / fix |
 |---|---|
-| `Config references undefined environment variable: ${X}` | A var is missing from `.env`. Fill it in. |
+| `Config references undefined environment variable: ${X}` | A var is missing from your secrets file (`secrets.env` for Docker, `.env` for native). Fill it in. |
 | Hangs / `Connection reset` during bot login | Host can’t reach Telegram (MTProto blocked). Run on a network that allows it. |
-| `401 Unauthorized` on curl | Wrong `guny` password — must match `TGFS_USER_PASSWORD` in `.env`. |
+| `401 Unauthorized` on curl | Wrong `guny` password — must match `TGFS_USER_PASSWORD` in your secrets file. |
 | GitHub metadata errors | PAT lacks Contents R/W, or wrong repo/branch (`master`). |
-| Changed `.env` but no effect | Docker: `docker compose restart`. Native: restart `python main.py`. |
+| Changed secrets but no effect | Docker: `docker compose restart`. Native: restart `python main.py`. |
+| `WARN The "_nb" variable is not set` (or similar) from Compose | A secret value contains `$`; that's why the secrets file is `secrets.env`, not `.env` — Compose won't auto-interpolate it. Harmless if it still appears for `config.yaml` vars. |
 
 See `DEPLOY.md` for the production/host deployment notes.
