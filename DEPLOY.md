@@ -24,13 +24,26 @@ cd tgfs-webdav
 git checkout fork-update-deploy   # until merged to master
 ```
 
-## 2. Provide config.yaml
+## 2. Provide config.yaml and .env
 
-Place your real `config.yaml` in the repo root (next to `docker-compose.yml`).
-Use `demo-config.yaml` as a reference for structure. It contains your Telegram
-api_id/api_hash, bot tokens, channels, GitHub PATs, JWT secret, and users.
+Secrets live in a **`.env`** file, not in `config.yaml`. `config.yaml` only holds
+non-secret structure and references secrets via `${VAR}` placeholders, which are
+resolved at startup from the environment (or `$TGFS_DATA_DIR/.env`). A missing
+variable fails fast with a clear error.
 
-Keep it secret — it is gitignored on purpose; never commit it.
+- Place your `config.yaml` in the repo root (next to `docker-compose.yml`).
+- Create `.env` from the template and fill in real values:
+  ```bash
+  cp .env.example .env
+  # edit .env — set TG_API_HASH, TG_BOT_TOKEN_1/2, TGFS_USER_PASSWORD,
+  # TGFS_JWT_SECRET, GH_PAT_MOVIES, GH_PAT_TV
+  ```
+
+Both `config.yaml` and `.env` are gitignored — never commit them. To rotate a
+secret later, edit only the relevant line in `.env`; `config.yaml` never changes.
+
+Compose mounts `.env` read-only into the container's data dir, so the app loads
+it directly (Compose does not interpolate the values).
 
 ## 3. Build and run
 

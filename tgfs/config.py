@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Literal, Optional, Self, TypedDict
@@ -10,6 +11,54 @@ logger = logging.getLogger(__name__)
 
 DATA_DIR = os.environ.get("TGFS_DATA_DIR", os.path.expanduser("~/.tgfs"))
 CONFIG_FILE = os.environ.get("TGFS_CONFIG_FILE", "config.yaml")
+
+_ENV_VAR_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def _expand_env_vars(value):
+    """Recursively replace ``${VAR}`` references with environment values.
+
+    Lets secrets live outside config.yaml (in the environment or a .env file).
+    Raises ValueError if a referenced variable is unset, so a missing secret
+    fails fast instead of silently becoming an empty string.
+    """
+    if isinstance(value, str):
+
+        def _replace(match: "re.Match[str]") -> str:
+            name = match.group(1)
+            try:
+                return os.environ[name]
+            except KeyError:
+                raise ValueError(
+                    f"Config references undefined environment variable: ${{{name}}}"
+                ) from None
+
+        return _ENV_VAR_PATTERN.sub(_replace, value)
+    if isinstance(value, dict):
+        return {k: _expand_env_vars(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_expand_env_vars(v) for v in value]
+    return value
+
+
+def _load_dotenv(path: str) -> None:
+    """Load ``KEY=VALUE`` pairs from a .env file into the environment.
+
+    Real environment variables take precedence (setdefault), so they can
+    override the file. No-op if the file does not exist.
+    """
+    if not os.path.exists(path):
+        return
+    with open(path, "r") as file:
+        for raw in file:
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip()
+            val = val.strip().strip('"').strip("'")
+            if key:
+                os.environ.setdefault(key, val)
 
 
 @dataclass
@@ -240,12 +289,13 @@ __config: Config | None = None
 def _load_config(file_path: str) -> Config:
     with open(file_path, "r") as file:
         data = yaml.safe_load(file)
-        return Config.from_dict(data)
+    return Config.from_dict(_expand_env_vars(data))
 
 
 def get_config() -> Config:
     global __config
     if __config is None:
+        _load_dotenv(expand_path(".env"))
         logger.info(f"Using configuration file: {__config_file_path}")
         __config = _load_config(__config_file_path)
     return __config
