@@ -12,6 +12,8 @@ from tgfs.config import (
     MetadataConfig,
     MetadataType,
     MetadataConfigDict,
+    _expand_env_vars,
+    _load_dotenv,
 )
 
 
@@ -197,10 +199,75 @@ class TestConfig:
         assert config.tgfs.download.chunk_size_kb == 1024
 
 
+class TestExpandEnvVars:
+    def test_replaces_in_string(self, monkeypatch):
+        monkeypatch.setenv("TG_BOT_TOKEN", "123:ABC")
+        assert _expand_env_vars("${TG_BOT_TOKEN}") == "123:ABC"
+
+    def test_leaves_plain_strings_untouched(self):
+        assert _expand_env_vars("0.0.0.0") == "0.0.0.0"
+
+    def test_recurses_into_dicts_and_lists(self, monkeypatch):
+        monkeypatch.setenv("PAT", "github_pat_xyz")
+        data = {"bot": {"tokens": ["${PAT}", "plain"]}}
+        assert _expand_env_vars(data) == {
+            "bot": {"tokens": ["github_pat_xyz", "plain"]}
+        }
+
+    def test_non_strings_pass_through(self):
+        assert _expand_env_vars(12345) == 12345
+        assert _expand_env_vars(True) is True
+
+    def test_value_used_literally_not_as_regex_template(self, monkeypatch):
+        # Secrets may contain $, \, } etc. - must not be treated as backrefs.
+        monkeypatch.setenv("SECRET", r"a$b\1c}d")
+        assert _expand_env_vars("${SECRET}") == r"a$b\1c}d"
+
+    def test_missing_var_raises(self, monkeypatch):
+        monkeypatch.delenv("DOES_NOT_EXIST", raising=False)
+        with pytest.raises(ValueError, match="DOES_NOT_EXIST"):
+            _expand_env_vars("${DOES_NOT_EXIST}")
+
+
+class TestLoadDotenv:
+    def test_missing_file_is_noop(self, tmp_path):
+        _load_dotenv(str(tmp_path / "nope.env"))  # should not raise
+
+    def test_loads_pairs_and_ignores_comments(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("FOO", raising=False)
+        monkeypatch.delenv("BAR", raising=False)
+        env = tmp_path / ".env"
+        env.write_text('# comment\nFOO=hello\nBAR="quoted value"\n\n')
+        _load_dotenv(str(env))
+        import os
+
+        assert os.environ["FOO"] == "hello"
+        assert os.environ["BAR"] == "quoted value"
+
+    def test_existing_env_takes_precedence(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("FOO", "from_real_env")
+        env = tmp_path / ".env"
+        env.write_text("FOO=from_file\n")
+        _load_dotenv(str(env))
+        import os
+
+        assert os.environ["FOO"] == "from_real_env"
+
+    def test_value_with_equals_sign(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("JWT", raising=False)
+        env = tmp_path / ".env"
+        env.write_text("JWT=a=b=c\n")
+        _load_dotenv(str(env))
+        import os
+
+        assert os.environ["JWT"] == "a=b=c"
+
+
 class TestConfigFunctions:
     def test_get_config_loads_file(self, mocker):
         mock_open = mocker.patch("tgfs.config.open")
         mock_yaml_load = mocker.patch("tgfs.config.yaml.safe_load")
+        mocker.patch("tgfs.config._load_dotenv")  # isolate from .env loading
         mocker.patch("tgfs.config.__config", None)
         from tgfs.config import get_config
 

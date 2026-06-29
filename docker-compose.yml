@@ -11,6 +11,8 @@ services:
       TGFS_CONFIG_FILE: /config/config.yaml
     volumes:
       - ./config.yaml:/config/config.yaml:ro
+      # secrets: the app reads $TGFS_DATA_DIR/.env at startup (mounted read-only)
+      - ./.env:/home/tgfs/.tgfs/.env:ro
       - tgfs-data:/home/tgfs/.tgfs
 
 volumes:
