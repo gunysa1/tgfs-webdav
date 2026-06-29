@@ -69,6 +69,13 @@ def create_app(
     NOT_FOUND = Response(status_code=HTTPStatus.NOT_FOUND, headers=common_headers)
     CREATED = Response(status_code=HTTPStatus.CREATED.value, headers=common_headers)
     NO_CONTENT = Response(status_code=HTTPStatus.NO_CONTENT, headers=common_headers)
+    # GET on a collection has no body to return; respond per RFC 7231 instead of
+    # crashing (PROPFIND is how a client lists a folder).
+    GET_ON_FOLDER_NOT_ALLOWED = Response(
+        status_code=HTTPStatus.METHOD_NOT_ALLOWED,
+        content="GET is not allowed on a collection; use PROPFIND to list it.",
+        headers={**common_headers, "Allow": "OPTIONS, PROPFIND, DELETE, MKCOL"},
+    )
 
     def CONFLICT(detail: str) -> Response:
         return Response(status_code=HTTPStatus.CONFLICT, content=detail)
@@ -183,7 +190,7 @@ def create_app(
                     headers=headers,
                 )
 
-            raise ValueError("Expected a Resource, got a Folder")
+            return GET_ON_FOLDER_NOT_ALLOWED
 
         return NOT_FOUND
 
