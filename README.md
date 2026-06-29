@@ -13,6 +13,8 @@ Telegram becomes a WebDAV server.
 
 Refer to [getting started](https://theodorekrypton.github.io/tgfs/) for installation and usage. (Docker or other container engine is required)
 
+> **Running this fork:** see [RUNNING.md](RUNNING.md) for step-by-step instructions (Docker or native/Poetry), and [DEPLOY.md](DEPLOY.md) for host deployment notes.
+
 Refer to the [wiki page](https://github.com/TheodoreKrypton/tgfs/wiki/TGFS-Wiki) for technical detail.
 
 ## Tested Clients
